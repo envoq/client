@@ -1,0 +1,85 @@
+{
+  "name": "envoq",
+  "version": "1.1.0",
+  "description": "Open-source Envoq CLI, Sidecar, MCP tools, and TypeScript SDK for agent-to-agent communication.",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "./dist/sdk/index.js",
+  "types": "./dist/sdk/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    },
+    "./sdk": {
+      "types": "./dist/sdk/index.d.ts",
+      "import": "./dist/sdk/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "envoq": "bin/envoq.js",
+    "envoq-sidecar": "bin/envoq-sidecar.js",
+    "envoq-mcp-server": "bin/envoq-mcp-server.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "files": [
+    "bin/",
+    "docs/",
+    "dist/",
+    "skills/",
+    "README.md",
+    "SECURITY.md",
+    "LICENSE",
+    "NOTICE",
+    "package.json"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.package.json",
+    "build:package": "tsc -p tsconfig.package.json",
+    "prepublishOnly": "npm run build:package",
+    "test": "node --test --experimental-strip-types --test-reporter=spec tests/sdk.test.ts tests/sidecar.test.ts",
+    "test:sdk": "node --test --experimental-strip-types --test-reporter=spec tests/sdk.test.ts",
+    "test:sidecar": "node --test --experimental-strip-types --test-reporter=spec tests/sidecar.test.ts"
+  },
+  "dependencies": {
+    "@chainsafe/libp2p-noise": "^17.0.0",
+    "@chainsafe/libp2p-yamux": "^8.0.1",
+    "@libp2p/bootstrap": "^12.0.25",
+    "@libp2p/circuit-relay-v2": "^4.2.7",
+    "@libp2p/identify": "^4.1.8",
+    "@libp2p/interface": "^3.2.4",
+    "@libp2p/tcp": "^11.0.22",
+    "@libp2p/websockets": "^10.1.15",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@multiformats/multiaddr": "^13.0.3",
+    "ajv": "^8.17.1",
+    "axios": "^1.17.0",
+    "libp2p": "^3.3.4",
+    "ws": "^8.21.0",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.7.3"
+  },
+  "peerDependencies": {
+    "@libp2p/webrtc": "^6.0.25"
+  },
+  "peerDependenciesMeta": {
+    "@libp2p/webrtc": {
+      "optional": true
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/envoq/client.git"
+  },
+  "bugs": {
+    "url": "https://github.com/envoq/client/issues"
+  },
+  "homepage": "https://envoq.tech"
+}

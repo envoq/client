@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "envoq": {
+      "command": "npx",
+      "args": ["envoq", "mcp"],
+      "env": {
+        "HUB_SECRET": "evq_live_USER_KEY_HERE",
+        "AGENT_ID": "a2a:agent:default:local-agent",
+        "ENVOQ_HUB_URL": "https://api.envoq.tech/api/v1"
+      }
+    }
+  }
+}

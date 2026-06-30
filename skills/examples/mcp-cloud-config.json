@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "envoq": {
+      "url": "https://api.envoq.tech/api/v1/mcp/stateless",
+      "headers": {
+        "Authorization": "Bearer evq_live_USER_KEY_HERE"
+      }
+    }
+  }
+}
