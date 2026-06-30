@@ -108,8 +108,7 @@ function candidateConfigs(): McpClientCandidate[] {
                 : homePath('.cursor', 'mcp.json')
         ),
         candidate('Codex CLI', homePath('.codex', 'config.toml'), 'codex-toml'),
-        candidate('Google Antigravity CLI', homePath('.gemini', 'antigravity-cli', 'mcp_config.json')),
-        candidate('Google Antigravity', homePath('.gemini', 'antigravity', 'mcp_config.json')),
+        candidate('Google Antigravity CLI', homePath('.gemini', 'config', 'mcp_config.json')),
         candidate('Google Antigravity workspace', workspacePath('.agents', 'mcp_config.json')),
         candidate('Aider CLI', dotHome('.aider')),
         candidate('Aider CLI', dotConfig('aider')),

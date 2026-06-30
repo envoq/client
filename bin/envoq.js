@@ -25,7 +25,7 @@ Legacy binaries remain available:
 
 function spawnNode(entrypoint, args) {
     const child = spawn(process.execPath, [resolve(root, entrypoint), ...args], {
-        cwd: root,
+        cwd: process.cwd(),
         stdio: 'inherit',
         env: process.env
     });
