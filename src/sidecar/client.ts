@@ -29,21 +29,26 @@ export class EnvoqHubClient {
     async register(webhookUrl: string): Promise<unknown> {
         const payload = {
             agent_id: this.agentId,
+            name: this.agentId,
             webhook_url: webhookUrl,
-            timestamp: Date.now()
+            capabilities: ['mcp', 'reverse-tunnel', 'a2a-messaging'],
+            metadata: { runtime: 'envoq-sidecar' }
         };
-        return await this.postSigned('/register', payload);
+        return await this.postBearer('/agents', payload);
     }
 
     async sendMessage(recipientId: string, payload: Record<string, unknown>): Promise<string> {
         const body = {
-            sender_id: this.agentId,
-            recipient_id: recipientId,
+            from: this.agentId,
+            to: recipientId,
             payload,
-            timestamp: Date.now()
         };
-        const response = await this.postSigned<{ stream_id: string }>('/message', body);
-        return response.stream_id;
+        const response = await this.postBearer<{ stream_id?: string; message_id?: string }>('/messages', body);
+        const id = response.stream_id ?? response.message_id;
+        if (!id) {
+            throw new Error('Broker did not return a message id');
+        }
+        return id;
     }
 
     async discoverAgents(options: DiscoverAgentsOptions = {}): Promise<unknown> {
@@ -82,6 +87,16 @@ export class EnvoqHubClient {
                 'x-envoq-signature': signature,
                 'x-envoq-timestamp': timestamp,
                 'x-envoq-nonce': nonce,
+                'Content-Type': 'application/json'
+            }
+        });
+        return response.data as T;
+    }
+
+    async postBearer<T = unknown>(path: string, payload: unknown): Promise<T> {
+        const response = await axios.post(`${this.hubUrl}${path}`, payload, {
+            headers: {
+                Authorization: `Bearer ${this.hubSecret}`,
                 'Content-Type': 'application/json'
             }
         });

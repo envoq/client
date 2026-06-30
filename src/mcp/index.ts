@@ -143,8 +143,41 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             },
             {
                 name: "envoq_status",
-                description: "Returns sidecar status, policy source, and local large-transfer state counts.",
+                description: "Returns sidecar status, tunnel state, inbox counts, policy source, and local large-transfer state counts.",
                 inputSchema: { type: "object", properties: {} },
+            },
+            {
+                name: "envoq_inbox_list",
+                description: "Lists incoming Envoq messages delivered through the reverse tunnel sidecar inbox.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        include_acknowledged: { type: "boolean" },
+                        limit: { type: "number" }
+                    }
+                },
+            },
+            {
+                name: "envoq_inbox_read",
+                description: "Reads one incoming Envoq sidecar inbox message by id.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string" }
+                    },
+                    required: ["id"],
+                },
+            },
+            {
+                name: "envoq_inbox_ack",
+                description: "Acknowledges one incoming Envoq sidecar inbox message by id.",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        id: { type: "string" }
+                    },
+                    required: ["id"],
+                },
             },
             {
                 name: "envoq_get_policy",
@@ -403,6 +436,34 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             case "envoq_status": {
                 return jsonResult(await sidecar.status());
             }
+            case "envoq_inbox_list": {
+                const options: { includeAcknowledged?: boolean; limit?: number } = {};
+                const includeAcknowledged = optionalBooleanArg(args, "include_acknowledged");
+                const limit = optionalNumberArg(args, "limit");
+                if (includeAcknowledged !== undefined) {
+                    options.includeAcknowledged = includeAcknowledged;
+                }
+                if (limit !== undefined) {
+                    options.limit = limit;
+                }
+                return jsonResult({ messages: await sidecar.listInbox(options) });
+            }
+            case "envoq_inbox_read": {
+                const id = stringArg(args, "id");
+                const message = await sidecar.readInbox(id);
+                if (!message) {
+                    throw new Error(`Inbox message not found: ${id}`);
+                }
+                return jsonResult({ message });
+            }
+            case "envoq_inbox_ack": {
+                const id = stringArg(args, "id");
+                const message = await sidecar.ackInbox(id);
+                if (!message) {
+                    throw new Error(`Inbox message not found: ${id}`);
+                }
+                return jsonResult({ success: true, message });
+            }
             case "envoq_get_policy": {
                 return jsonResult(await sidecar.getPolicy(args.force_refresh === true));
             }
@@ -637,6 +698,16 @@ async function main() {
     const transport = new StdioServerTransport();
     await server.connect(transport);
     console.error(`[Envoq MCP Sidecar] Server initialized for Agent ID: ${AGENT_ID}`);
+    if (process.env.ENVOQ_SIDECAR_DISABLE_TUNNEL !== "true") {
+        await sidecar.startTunnel()
+            .then((status) => {
+                console.error(`[Envoq MCP Sidecar] Reverse tunnel connected for tenant ${status.tenant_id ?? "unknown"}`);
+            })
+            .catch((err) => {
+                const message = err instanceof Error ? err.message : String(err);
+                console.error(`[Envoq MCP Sidecar] Reverse tunnel start failed; reconnect will continue in the background when possible: ${message}`);
+            });
+    }
 }
 
 main().catch((err) => {

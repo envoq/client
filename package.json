@@ -40,7 +40,7 @@
     "build": "tsc -p tsconfig.package.json",
     "build:package": "tsc -p tsconfig.package.json",
     "prepublishOnly": "npm run build:package",
-    "test": "node --test --experimental-strip-types --test-reporter=spec tests/sdk.test.ts tests/sidecar.test.ts",
+    "test": "node --test --experimental-strip-types --test-reporter=spec tests/sdk.test.ts tests/sidecar.test.ts tests/tunnel-client.test.ts",
     "test:sdk": "node --test --experimental-strip-types --test-reporter=spec tests/sdk.test.ts",
     "test:sidecar": "node --test --experimental-strip-types --test-reporter=spec tests/sidecar.test.ts"
   },

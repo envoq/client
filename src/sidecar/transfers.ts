@@ -3,6 +3,7 @@ import path from 'path';
 import type { CloudStorageAdapter } from './cloud.ts';
 import { createCloudStorageAdapterFromEnv } from './cloud-providers.ts';
 import { EnvoqHubClient } from './client.ts';
+import { SidecarInbox, type IncomingTunnelMessageInput, type SidecarInboxMessage } from './inbox.ts';
 import {
     buildTransferFileUrl,
     SidecarFileServer,
@@ -39,12 +40,15 @@ import {
     type DownloadSandboxOptions
 } from './sandbox.ts';
 import { hasTransportKind } from './transport-registry.ts';
+import { EnvoqTunnelClient, type EnvoqTunnelStatus } from './tunnel-client.ts';
 
 export interface EnvoqSidecarConfig {
     hubUrl: string;
     hubSecret: string;
     agentId: string;
     storePath?: string;
+    inboxPath?: string;
+    identityPath?: string;
     policyBundle?: PolicyBundle;
     cloudAdapter?: CloudStorageAdapter;
     libp2pOptions?: Libp2pTransportOptions;
@@ -133,6 +137,7 @@ function stoppedLibp2pStatus(): Libp2pTransportStatus {
 export class EnvoqSidecar {
     public readonly agentId: string;
     public readonly store: SidecarStore;
+    public readonly inbox: SidecarInbox;
     public readonly client: EnvoqHubClient;
     public readonly fileServer: SidecarFileServer;
     public get libp2pTransport(): Libp2pTransferTransport {
@@ -146,12 +151,14 @@ export class EnvoqSidecar {
     private readonly policyBundle: PolicyBundle | undefined;
     private readonly cloudAdapter: CloudStorageAdapter;
     private readonly libp2pOptions: Libp2pTransportOptions | undefined;
+    private readonly tunnelClient: EnvoqTunnelClient;
     private libp2pTransportInstance: Libp2pTransferTransport | undefined;
 
     constructor(config: EnvoqSidecarConfig) {
         this.agentId = config.agentId;
         this.hubUrl = config.hubUrl.replace(/\/+$/, '');
         this.store = new SidecarStore(config.storePath);
+        this.inbox = new SidecarInbox(config.inboxPath);
         this.fileServer = new SidecarFileServer(this.store);
         this.libp2pOptions = config.libp2pOptions;
         this.client = new EnvoqHubClient({
@@ -159,6 +166,17 @@ export class EnvoqSidecar {
             hubSecret: config.hubSecret,
             agentId: config.agentId
         });
+        const tunnelConfig = {
+            hubUrl: this.hubUrl,
+            apiKey: config.hubSecret,
+            agentId: config.agentId,
+            onMessage: async (message: IncomingTunnelMessageInput) => await this.inbox.append(message)
+        };
+        this.tunnelClient = new EnvoqTunnelClient(
+            config.identityPath === undefined
+                ? tunnelConfig
+                : { ...tunnelConfig, identityPath: config.identityPath }
+        );
         this.policyBundle = config.policyBundle;
         this.cloudAdapter = config.cloudAdapter ?? createCloudStorageAdapterFromEnv();
     }
@@ -200,12 +218,15 @@ export class EnvoqSidecar {
         agent_id: string;
         hub_url: string;
         transfers: { total: number; by_status: Record<string, number> };
+        inbox: { total: number; unread: number; acknowledged: number };
+        tunnel: EnvoqTunnelStatus;
         policy: { source: string; security_policy_id: string; large_payload_policy_id: string };
         file_server: SidecarFileServerStatus;
         libp2p: Libp2pTransportStatus;
     }> {
         const policy = await this.getPolicy();
         const transfers = await this.store.listTransfers();
+        const inbox = await this.inbox.counts();
         const byStatus: Record<string, number> = {};
         for (const transfer of transfers) {
             byStatus[transfer.status] = (byStatus[transfer.status] ?? 0) + 1;
@@ -218,6 +239,8 @@ export class EnvoqSidecar {
                 total: transfers.length,
                 by_status: byStatus
             },
+            inbox,
+            tunnel: this.tunnelClient.status(),
             policy: {
                 source: policy.source,
                 security_policy_id: policy.bundle.security_policy.policy_id,
@@ -226,6 +249,28 @@ export class EnvoqSidecar {
             file_server: this.fileServer.status,
             libp2p: this.libp2pTransportInstance?.status() ?? stoppedLibp2pStatus()
         };
+    }
+
+    async startTunnel(): Promise<EnvoqTunnelStatus> {
+        await this.tunnelClient.start();
+        return this.tunnelClient.status();
+    }
+
+    stopTunnel(): EnvoqTunnelStatus {
+        this.tunnelClient.stop();
+        return this.tunnelClient.status();
+    }
+
+    async listInbox(options: { includeAcknowledged?: boolean; limit?: number } = {}): Promise<SidecarInboxMessage[]> {
+        return await this.inbox.list(options);
+    }
+
+    async readInbox(id: string): Promise<SidecarInboxMessage | null> {
+        return await this.inbox.read(id);
+    }
+
+    async ackInbox(id: string): Promise<SidecarInboxMessage | null> {
+        return await this.inbox.ack(id);
     }
 
     async startFileServer(options: SidecarFileServerOptions = {}): Promise<SidecarFileServerStatus> {
