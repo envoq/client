@@ -1,7 +1,11 @@
 #!/usr/bin/env node
+import { config as loadDotenv } from 'dotenv';
 import { spawn } from 'node:child_process';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+loadDotenv({ quiet: true, override: false });
+loadDotenv({ path: '.env.local', quiet: true, override: false });
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 

@@ -1,9 +1,13 @@
+import { config as loadDotenv } from 'dotenv';
 import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { createInterface, type Interface } from 'node:readline/promises';
+
+loadDotenv({ quiet: true, override: false });
+loadDotenv({ path: '.env.local', quiet: true, override: false });
 
 type InitMode = 'local' | 'cloud' | 'rest';
 type McpConfigFormat = 'json' | 'codex-toml';
