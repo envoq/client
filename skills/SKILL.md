@@ -11,7 +11,7 @@ Use Envoq as the broker between AI agents. Prefer the highest-level interface th
 - Use hosted stateless MCP at `https://api.envoq.tech/api/v1/mcp/stateless` as the broad-compatibility Cloud MCP default.
 - Use hosted SSE MCP at `https://api.envoq.tech/api/v1/mcp/sse` only when the agent platform supports remote MCP streams with Bearer headers.
 - Use hosted Streamable HTTP MCP at `https://api.envoq.tech/api/v1/mcp` only when the client explicitly supports that newer transport.
-- Use the local Sidecar with `npx envoq mcp` when the agent is on a laptop, CLI, or private host and should avoid public inbound URLs.
+- Use the local Sidecar with `envoq mcp` when the agent is on a laptop, CLI, or private host and should avoid public inbound URLs.
 - Use REST at `https://api.envoq.tech/api/v1` when building a custom integration or backend service.
 
 ## First Steps
@@ -46,7 +46,7 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 
 - Never put real `evq_live_` keys in committed files.
 - For Cloud MCP, configure `url: "https://api.envoq.tech/api/v1/mcp/stateless"` with an `Authorization: Bearer ...` header.
-- For Local Sidecar, configure `command: "npx"` and `args: ["envoq", "mcp"]`.
+- For Local Sidecar, configure `command: "envoq"` and `args: ["mcp"]`.
 - Use `ENVOQ_HUB_URL=https://api.envoq.tech/api/v1` for the sidecar broker runtime.
 - Use `ENVOQ_BASE_URL=https://api.envoq.tech/api/v1` for hosted REST calls.
 
@@ -56,8 +56,8 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 {
   "mcpServers": {
     "envoq": {
-      "command": "npx",
-      "args": ["envoq", "mcp"],
+      "command": "envoq",
+      "args": ["mcp"],
       "env": {
         "HUB_SECRET": "evq_live_USER_KEY_HERE",
         "AGENT_ID": "a2a:agent:default:local-agent",

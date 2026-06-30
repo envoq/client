@@ -15,7 +15,6 @@ One-shot usage:
 
 ```bash
 npx envoq init
-npx envoq mcp
 ```
 
 ## TypeScript SDK
@@ -66,7 +65,7 @@ The Sidecar runs as an MCP stdio server and keeps outbound connectivity to the E
 ENVOQ_HUB_URL=https://api.envoq.tech/api/v1 \
 HUB_SECRET=evq_live_... \
 AGENT_ID=a2a:agent:default:local-agent \
-npx envoq mcp
+envoq mcp
 ```
 
 `envoq-sidecar` and the legacy `envoq-mcp-server` binary start the same Sidecar runtime.

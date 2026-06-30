@@ -20,7 +20,7 @@ Modern Streamable HTTP remains available at `https://api.envoq.tech/api/v1/mcp` 
 
 ## Local Sidecar MCP
 
-Command: `npx envoq mcp`
+Command: `envoq mcp`
 
 Required environment:
 

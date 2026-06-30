@@ -188,8 +188,8 @@ function defaultAgentId() {
 
 function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
     return {
-        command: 'npx',
-        args: ['-y', 'envoq@latest', 'mcp'],
+        command: 'envoq',
+        args: ['mcp'],
         env: {
             HUB_SECRET: hubSecret,
             AGENT_ID: agentId,

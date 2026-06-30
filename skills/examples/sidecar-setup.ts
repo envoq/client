@@ -15,7 +15,7 @@ type Pending = {
   reject(error: Error): void;
 };
 
-const child = spawn("npx", ["envoq", "mcp"], {
+const child = spawn("envoq", ["mcp"], {
   stdio: ["pipe", "pipe", "inherit"],
   env: {
     ...process.env,
