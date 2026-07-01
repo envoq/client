@@ -1,14 +1,13 @@
-import { config as loadDotenv } from 'dotenv';
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { createInterface, type Interface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
+import { envoqConfigDir, envoqEnvPath, loadEnvoqEnv } from '../config/env.ts';
 
-loadDotenv({ quiet: true, override: false });
-loadDotenv({ path: '.env.local', quiet: true, override: false });
+loadEnvoqEnv();
 
 type InitMode = 'local' | 'cloud' | 'rest';
 type McpConfigFormat = 'json' | 'codex-toml';
@@ -39,7 +38,7 @@ Usage:
 The wizard configures one of three modes:
   Local Sidecar   MCP stdio sidecar with outbound broker connectivity
   Cloud MCP       Hosted stateless MCP endpoint at https://api.envoq.tech/api/v1/mcp/stateless
-  REST API        Project .env.local for direct REST calls
+  REST API        ~/.envoq/.env.local for direct REST calls
 `);
 }
 
@@ -188,14 +187,14 @@ function defaultAgentId() {
     return `a2a:agent:default:${host}`.slice(0, 64);
 }
 
-function envoqCliEntrypoint() {
-    return path.join(PACKAGE_ROOT, 'bin', 'envoq.js');
+function mcpEntrypoint() {
+    return path.join(PACKAGE_ROOT, 'dist', 'mcp', 'index.js');
 }
 
 function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
     return {
         command: process.execPath,
-        args: [envoqCliEntrypoint(), 'mcp'],
+        args: [mcpEntrypoint()],
         env: {
             HUB_SECRET: hubSecret,
             AGENT_ID: agentId,
@@ -384,10 +383,19 @@ function mergeEnvContent(existing: string, values: Record<string, string>) {
     return `${nextLines.join('\n').replace(/\n+$/, '')}\n`;
 }
 
-async function writeProjectEnv(values: Record<string, string>): Promise<void> {
-    const envPath = path.join(process.cwd(), '.env.local');
+async function ensureConfigDir(): Promise<void> {
+    const configDir = envoqConfigDir();
+    await mkdir(configDir, { recursive: true, mode: 0o700 });
+    await chmod(configDir, 0o700).catch(() => undefined);
+}
+
+async function writeEnvoqEnv(values: Record<string, string>): Promise<string> {
+    await ensureConfigDir();
+    const envPath = envoqEnvPath();
     const existing = await readFile(envPath, 'utf8').catch(() => '');
-    await writeFile(envPath, mergeEnvContent(existing, values), 'utf8');
+    await writeFile(envPath, mergeEnvContent(existing, values), { encoding: 'utf8', mode: 0o600 });
+    await chmod(envPath, 0o600).catch(() => undefined);
+    return envPath;
 }
 
 async function askRequired(rl: Interface, question: string): Promise<string> {
@@ -464,15 +472,15 @@ async function runWizard(): Promise<void> {
             ENVOQ_HUB_URL: mode === 'local' ? SIDECAR_HUB_URL : REST_BASE_URL
         };
 
-        await writeProjectEnv(envValues);
-        console.log(`Wrote ${path.join(process.cwd(), '.env.local')}`);
+        const envPath = await writeEnvoqEnv(envValues);
+        console.log(`Wrote ${envPath}`);
 
         if (mode === 'local') {
             await configureMcpClients(localMcpConfig(apiKey, agentId));
         } else if (mode === 'cloud') {
             await configureMcpClients(cloudMcpConfig(apiKey));
         } else {
-            console.log('\nREST API mode is ready. Use ENVOQ_API_KEY and ENVOQ_BASE_URL from .env.local.');
+            console.log(`\nREST API mode is ready. Use ENVOQ_API_KEY and ENVOQ_BASE_URL from ${envPath}.`);
         }
 
         console.log('\nNext steps:');

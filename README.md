@@ -11,6 +11,8 @@ npm install -g envoq
 envoq init
 ```
 
+`envoq init` stores local credentials in `~/.envoq/.env.local` and writes MCP client configs with absolute Node and MCP runtime paths so sidecars do not depend on shell `PATH` setup.
+
 One-shot usage:
 
 ```bash

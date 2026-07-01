@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import http from 'node:http';
 import { mkdtemp } from 'node:fs/promises';
+import type { Socket } from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -217,4 +218,62 @@ test('EnvoqTunnelClient falls back to default tenant for legacy broker registrat
     const status = client.status();
     assert.equal(status.connected, true);
     assert.equal(status.tenant_id, 'default');
+});
+
+test('EnvoqTunnelClient times out a stalled WebSocket handshake', async (t) => {
+    const sockets: Socket[] = [];
+
+    const server = http.createServer(async (req, res) => {
+        if (req.method === 'POST' && req.url === '/api/v1/agents') {
+            const body = await readJsonBody(req);
+            assert.equal(String(body.agent_id), agentId);
+            res.writeHead(201, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+                tenant_id: tenantId,
+                agent_id: agentId
+            }));
+            return;
+        }
+        res.writeHead(404);
+        res.end();
+    });
+
+    server.on('upgrade', (_req, socket) => {
+        sockets.push(socket);
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        throw new Error('Missing test server address');
+    }
+
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'envoq-tunnel-client-timeout-'));
+    const client = new EnvoqTunnelClient({
+        hubUrl: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey,
+        agentId,
+        identityPath: path.join(dir, 'identity.json'),
+        connectTimeoutMs: 50,
+        reconnectMinMs: 10_000,
+        reconnectMaxMs: 10_000
+    });
+
+    t.after(() => {
+        client.stop();
+        for (const socket of sockets) {
+            socket.destroy();
+        }
+        server.close();
+    });
+
+    const startedAt = Date.now();
+    await assert.rejects(
+        () => client.start(),
+        /WebSocket connection timed out after 50ms/
+    );
+
+    assert.equal(client.status().connected, false);
+    assert.match(client.status().last_error ?? '', /timed out after 50ms/);
+    assert.ok(Date.now() - startedAt < 1_000);
 });

@@ -1,4 +1,3 @@
-import { config as loadDotenv } from "dotenv";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import {
@@ -10,9 +9,9 @@ import {
 import { EnvoqSidecar } from "../sidecar/transfers.js";
 import type { LargeTransferManifest } from "../sidecar/manifest.js";
 import type { DiscoverAgentsInput, PrepareLargeTransferInput, TransferSlaProposal } from "../sidecar/transfers.js";
+import { loadEnvoqEnv } from "../config/env.js";
 
-loadDotenv({ quiet: true, override: false });
-loadDotenv({ path: ".env.local", quiet: true, override: false });
+loadEnvoqEnv();
 
 const ENVOQ_HUB_URL = process.env.ENVOQ_HUB_URL || "https://api.envoq.tech/api/v1";
 const HUB_SECRET = process.env.HUB_SECRET;
@@ -32,7 +31,7 @@ const sidecar = new EnvoqSidecar({
 const server = new Server(
     {
         name: `envoq-mcp-sidecar-${AGENT_ID}`,
-        version: "1.1.1",
+        version: "1.1.6",
     },
     {
         capabilities: {

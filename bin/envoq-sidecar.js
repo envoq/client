@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 import { config as loadDotenv } from 'dotenv';
 import { spawn } from 'node:child_process';
-import { dirname, resolve } from 'node:path';
+import os from 'node:os';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+const configDir = process.env.ENVOQ_CONFIG_DIR || join(os.homedir(), '.envoq');
+
+loadDotenv({ path: join(configDir, '.env.local'), quiet: true, override: false });
 loadDotenv({ quiet: true, override: false });
 loadDotenv({ path: '.env.local', quiet: true, override: false });
 

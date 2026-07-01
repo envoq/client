@@ -10,7 +10,7 @@ import { promisify } from 'node:util';
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const execFile = promisify(execFileWithCallback);
 
-test('local MCP config uses absolute node and Envoq CLI paths', async () => {
+test('local MCP config uses absolute node and direct MCP runtime paths', async () => {
     const { stdout } = await execFile(
         process.execPath,
         ['--experimental-strip-types', path.join(repoRoot, 'src/cli/init.ts'), '--print-config', 'local'],
@@ -30,7 +30,7 @@ test('local MCP config uses absolute node and Envoq CLI paths', async () => {
     assert.ok(config);
     assert.equal(config.command, process.execPath);
     assert.notEqual(config.command, 'envoq');
-    assert.deepEqual(config.args, [path.join(repoRoot, 'bin', 'envoq.js'), 'mcp']);
+    assert.deepEqual(config.args, [path.join(repoRoot, 'dist', 'mcp', 'index.js')]);
     assert.equal(path.isAbsolute(String(config.args?.[0])), true);
     assert.equal(config.env?.ENVOQ_HUB_URL, 'https://api.envoq.tech/api/v1');
 });

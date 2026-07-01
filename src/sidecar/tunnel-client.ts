@@ -12,6 +12,7 @@ export interface EnvoqTunnelClientConfig {
     reconnectMinMs?: number;
     reconnectMaxMs?: number;
     pingIntervalMs?: number;
+    connectTimeoutMs?: number;
     onMessage?: (message: IncomingTunnelMessageInput) => Promise<{ id?: string } | void>;
 }
 
@@ -57,6 +58,7 @@ export class EnvoqTunnelClient {
     private readonly reconnectMinMs: number;
     private readonly reconnectMaxMs: number;
     private readonly pingIntervalMs: number;
+    private readonly connectTimeoutMs: number;
     private readonly onMessage: (message: IncomingTunnelMessageInput) => Promise<{ id?: string } | void>;
     private readonly wssUrl: string;
 
@@ -81,6 +83,7 @@ export class EnvoqTunnelClient {
         this.reconnectMinMs = config.reconnectMinMs ?? 1_000;
         this.reconnectMaxMs = config.reconnectMaxMs ?? 30_000;
         this.pingIntervalMs = config.pingIntervalMs ?? 30_000;
+        this.connectTimeoutMs = config.connectTimeoutMs ?? 5_000;
         this.onMessage = config.onMessage ?? (async () => undefined);
         this.wssUrl = tunnelConnectUrl(this.hubUrl);
     }
@@ -193,8 +196,20 @@ export class EnvoqTunnelClient {
             });
             this.ws = ws;
 
-            ws.on('open', () => {
+            const timeout = setTimeout(() => {
+                if (settled) return;
                 settled = true;
+                const err = new Error(`WebSocket connection timed out after ${this.connectTimeoutMs}ms`);
+                this.lastError = err.message;
+                ws.terminate();
+                reject(err);
+            }, this.connectTimeoutMs);
+            timeout.unref?.();
+
+            ws.on('open', () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
                 this.state = 'connected';
                 this.connectedAt = new Date().toISOString();
                 this.lastError = null;
@@ -214,11 +229,21 @@ export class EnvoqTunnelClient {
                 this.awaitingPong = false;
             });
 
-            ws.on('close', () => {
+            ws.on('close', (code, reason) => {
                 this.stopPingLoop();
                 this.connectedAt = null;
                 if (this.ws === ws) {
                     this.ws = null;
+                }
+                if (!settled) {
+                    settled = true;
+                    clearTimeout(timeout);
+                    const detail = reason.length > 0
+                        ? `: ${reason.toString('utf8')}`
+                        : code > 0
+                            ? ` with code ${code}`
+                            : '';
+                    reject(new Error(`WebSocket closed before connection opened${detail}`));
                 }
                 if (this.shouldRun) {
                     this.scheduleReconnect();
@@ -231,6 +256,7 @@ export class EnvoqTunnelClient {
                 this.lastError = err.message;
                 if (!settled) {
                     settled = true;
+                    clearTimeout(timeout);
                     reject(err);
                     return;
                 }
