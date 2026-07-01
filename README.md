@@ -12,11 +12,20 @@ envoq init
 ```
 
 `envoq init` stores local credentials in `~/.envoq/.env.local` and writes MCP client configs with absolute Node and MCP runtime paths so sidecars do not depend on shell `PATH` setup.
+The wizard suggests a stable `AGENT_ID` from the current hostname; press Enter to accept it.
 
 One-shot usage:
 
 ```bash
 npx envoq init
+```
+
+CLI basics:
+
+```bash
+envoq --version
+envoq --help
+envoq status --debug
 ```
 
 ## TypeScript SDK
@@ -71,6 +80,23 @@ envoq mcp
 ```
 
 `envoq-sidecar` and the legacy `envoq-mcp-server` binary start the same Sidecar runtime.
+
+Tunnel handshakes time out after 5 seconds. If the broker rejects the reverse tunnel with `402 Payment Required` or `403 Forbidden`, the sidecar logs a single concise message and retries slowly in the background instead of spamming MCP clients.
+
+## Standalone Daemon
+
+For hosts that should keep the Sidecar running after the terminal closes, choose standalone daemon mode in `envoq init`. The wizard can configure PM2 as `envoq-daemon` and will print the `pm2 startup` command for boot-time setup.
+
+Manual daemon commands:
+
+```bash
+envoq daemon
+pm2 start "$(npm root -g)/envoq/dist/daemon/index.js" --name envoq-daemon --interpreter "$(command -v node)" --update-env
+pm2 save
+pm2 startup
+```
+
+Use `ENVOQ_DEBUG=1` or `--debug` for detailed network diagnostics. Secrets are redacted in debug output.
 
 ## Development
 

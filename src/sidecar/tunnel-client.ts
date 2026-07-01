@@ -1,8 +1,12 @@
 import axios from 'axios';
+import type { IncomingMessage } from 'node:http';
 import { WebSocket } from 'ws';
 import { loadOrCreateSidecarIdentity, signTunnelHandshake, type SidecarIdentity } from './identity.ts';
 import { FrameType, formatFrame, parseFrame } from './tunnel-frame.ts';
 import type { IncomingTunnelMessageInput } from './inbox.ts';
+import { debugLog } from '../utils/debug.ts';
+
+type TunnelFailureKind = 'network' | 'timeout' | 'http' | 'restricted';
 
 export interface EnvoqTunnelClientConfig {
     hubUrl: string;
@@ -13,6 +17,8 @@ export interface EnvoqTunnelClientConfig {
     reconnectMaxMs?: number;
     pingIntervalMs?: number;
     connectTimeoutMs?: number;
+    restrictedReconnectMinMs?: number;
+    restrictedReconnectMaxMs?: number;
     onMessage?: (message: IncomingTunnelMessageInput) => Promise<{ id?: string } | void>;
 }
 
@@ -25,7 +31,10 @@ export interface EnvoqTunnelStatus {
     wss_url: string;
     reconnect_attempts: number;
     last_error: string | null;
+    last_http_status: number | null;
+    last_failure_kind: TunnelFailureKind | null;
     connected_at: string | null;
+    next_reconnect_at: string | null;
 }
 
 interface RegistrationResponse {
@@ -50,6 +59,69 @@ function maybeString(value: unknown): string | undefined {
     return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+class TunnelHttpError extends Error {
+    readonly httpStatus: number;
+    readonly bodySnippet: string | undefined;
+
+    constructor(status: number, statusText: string | undefined, bodySnippet?: string) {
+        const label = statusText ? `${status} ${statusText}` : `${status}`;
+        super(`WebSocket handshake rejected with HTTP ${label}`);
+        this.name = 'TunnelHttpError';
+        this.httpStatus = status;
+        if (bodySnippet) {
+            this.bodySnippet = bodySnippet;
+        }
+    }
+}
+
+function httpStatusFromError(err: unknown): number | undefined {
+    if (err instanceof TunnelHttpError) {
+        return err.httpStatus;
+    }
+    if (axios.isAxiosError(err)) {
+        return err.response?.status;
+    }
+    const record = err && typeof err === 'object' ? err as Record<string, unknown> : {};
+    return typeof record.httpStatus === 'number' ? record.httpStatus : undefined;
+}
+
+function failureKindFromError(err: unknown): TunnelFailureKind {
+    const status = httpStatusFromError(err);
+    if (status === 402 || status === 403) {
+        return 'restricted';
+    }
+    if (status !== undefined) {
+        return 'http';
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    return /timed out/i.test(message) ? 'timeout' : 'network';
+}
+
+function responseBodySnippet(response: IncomingMessage, limit = 2048, timeoutMs = 1_000): Promise<string> {
+    return new Promise((resolve) => {
+        let body = '';
+        let settled = false;
+        const finish = () => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve(body.trim());
+        };
+        const timeout = setTimeout(finish, timeoutMs);
+        timeout.unref?.();
+
+        response.setEncoding('utf8');
+        response.on('data', (chunk: string) => {
+            if (body.length < limit) {
+                body += chunk.slice(0, limit - body.length);
+            }
+        });
+        response.on('end', finish);
+        response.on('error', finish);
+        response.resume();
+    });
+}
+
 export class EnvoqTunnelClient {
     private readonly hubUrl: string;
     private readonly apiKey: string;
@@ -59,6 +131,8 @@ export class EnvoqTunnelClient {
     private readonly reconnectMaxMs: number;
     private readonly pingIntervalMs: number;
     private readonly connectTimeoutMs: number;
+    private readonly restrictedReconnectMinMs: number;
+    private readonly restrictedReconnectMaxMs: number;
     private readonly onMessage: (message: IncomingTunnelMessageInput) => Promise<{ id?: string } | void>;
     private readonly wssUrl: string;
 
@@ -73,6 +147,9 @@ export class EnvoqTunnelClient {
     private awaitingPong = false;
     private connectedAt: string | null = null;
     private lastError: string | null = null;
+    private lastHttpStatus: number | null = null;
+    private lastFailureKind: TunnelFailureKind | null = null;
+    private nextReconnectAt: string | null = null;
     private connectPromise: Promise<void> | null = null;
 
     constructor(config: EnvoqTunnelClientConfig) {
@@ -84,6 +161,8 @@ export class EnvoqTunnelClient {
         this.reconnectMaxMs = config.reconnectMaxMs ?? 30_000;
         this.pingIntervalMs = config.pingIntervalMs ?? 30_000;
         this.connectTimeoutMs = config.connectTimeoutMs ?? 5_000;
+        this.restrictedReconnectMinMs = config.restrictedReconnectMinMs ?? 15 * 60_000;
+        this.restrictedReconnectMaxMs = config.restrictedReconnectMaxMs ?? 60 * 60_000;
         this.onMessage = config.onMessage ?? (async () => undefined);
         this.wssUrl = tunnelConnectUrl(this.hubUrl);
     }
@@ -128,7 +207,10 @@ export class EnvoqTunnelClient {
             wss_url: this.wssUrl,
             reconnect_attempts: this.reconnectAttempts,
             last_error: this.lastError,
-            connected_at: this.connectedAt
+            last_http_status: this.lastHttpStatus,
+            last_failure_kind: this.lastFailureKind,
+            connected_at: this.connectedAt,
+            next_reconnect_at: this.nextReconnectAt
         };
     }
 
@@ -140,6 +222,13 @@ export class EnvoqTunnelClient {
             await this.openWebSocket(this.identity);
         } catch (err: any) {
             this.lastError = err instanceof Error ? err.message : String(err);
+            this.lastHttpStatus = httpStatusFromError(err) ?? null;
+            this.lastFailureKind = failureKindFromError(err);
+            debugLog('Reverse tunnel connection failed', {
+                kind: this.lastFailureKind,
+                http_status: this.lastHttpStatus,
+                message: this.lastError
+            });
             this.scheduleReconnect();
             throw err;
         }
@@ -213,6 +302,9 @@ export class EnvoqTunnelClient {
                 this.state = 'connected';
                 this.connectedAt = new Date().toISOString();
                 this.lastError = null;
+                this.lastHttpStatus = null;
+                this.lastFailureKind = null;
+                this.nextReconnectAt = null;
                 this.reconnectAttempts = 0;
                 this.startPingLoop();
                 resolve();
@@ -250,6 +342,31 @@ export class EnvoqTunnelClient {
                 } else {
                     this.state = 'stopped';
                 }
+            });
+
+            ws.on('unexpected-response', (_request, response) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                const status = response.statusCode ?? 0;
+                const statusText = response.statusMessage;
+                const bodyPromise = responseBodySnippet(response);
+                const rejectWithError = (bodySnippet?: string) => {
+                    const err = new TunnelHttpError(status, statusText, bodySnippet);
+                    this.lastError = bodySnippet
+                        ? `${err.message}: ${bodySnippet}`
+                        : err.message;
+                    this.lastHttpStatus = status;
+                    this.lastFailureKind = failureKindFromError(err);
+                    debugLog('Reverse tunnel handshake rejected', {
+                        http_status: status,
+                        status_text: statusText,
+                        body: bodySnippet
+                    });
+                    ws.terminate();
+                    reject(err);
+                };
+                bodyPromise.then(rejectWithError, () => rejectWithError());
             });
 
             ws.on('error', (err) => {
@@ -325,12 +442,17 @@ export class EnvoqTunnelClient {
         }
         this.state = 'reconnecting';
         this.reconnectAttempts += 1;
-        const delay = Math.min(
-            this.reconnectMaxMs,
-            this.reconnectMinMs * 2 ** Math.min(this.reconnectAttempts - 1, 6)
-        );
+        const restricted = this.lastFailureKind === 'restricted';
+        const minDelay = restricted ? this.restrictedReconnectMinMs : this.reconnectMinMs;
+        const maxDelay = restricted ? this.restrictedReconnectMaxMs : this.reconnectMaxMs;
+        const exponent = restricted
+            ? Math.min(this.reconnectAttempts - 1, 2)
+            : Math.min(this.reconnectAttempts - 1, 6);
+        const delay = Math.min(maxDelay, minDelay * 2 ** exponent);
+        this.nextReconnectAt = new Date(Date.now() + delay).toISOString();
         this.reconnectTimer = setTimeout(() => {
             this.reconnectTimer = null;
+            this.nextReconnectAt = null;
             if (!this.shouldRun) {
                 return;
             }
@@ -370,5 +492,6 @@ export class EnvoqTunnelClient {
             clearTimeout(this.reconnectTimer);
             this.reconnectTimer = null;
         }
+        this.nextReconnectAt = null;
     }
 }

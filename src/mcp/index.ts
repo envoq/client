@@ -10,6 +10,7 @@ import { EnvoqSidecar } from "../sidecar/transfers.js";
 import type { LargeTransferManifest } from "../sidecar/manifest.js";
 import type { DiscoverAgentsInput, PrepareLargeTransferInput, TransferSlaProposal } from "../sidecar/transfers.js";
 import { loadEnvoqEnv } from "../config/env.js";
+import { debugLog } from "../utils/debug.js";
 
 loadEnvoqEnv();
 
@@ -31,7 +32,7 @@ const sidecar = new EnvoqSidecar({
 const server = new Server(
     {
         name: `envoq-mcp-sidecar-${AGENT_ID}`,
-        version: "1.1.6",
+        version: "1.1.7",
     },
     {
         capabilities: {
@@ -82,6 +83,27 @@ function numberArg(args: Record<string, unknown>, key: string): number {
 function optionalBooleanArg(args: Record<string, unknown>, key: string): boolean | undefined {
     const value = args[key];
     return typeof value === "boolean" ? value : undefined;
+}
+
+function httpStatusFromError(err: unknown): number | undefined {
+    const record = err && typeof err === "object" ? err as Record<string, unknown> : {};
+    if (typeof record.httpStatus === "number") return record.httpStatus;
+    const message = err instanceof Error ? err.message : String(err);
+    const match = message.match(/status(?: code)?\s+(\d{3})|HTTP\s+(\d{3})/i);
+    const status = match?.[1] ?? match?.[2];
+    return status ? Number(status) : undefined;
+}
+
+function tunnelStartFailureMessage(err: unknown): string {
+    const message = err instanceof Error ? err.message : String(err);
+    const status = httpStatusFromError(err);
+    if (status === 402) {
+        return "Reverse tunnel unavailable: HTTP 402 Payment Required. Retrying with slow backoff in the background.";
+    }
+    if (status === 403) {
+        return "Reverse tunnel unavailable: HTTP 403 Forbidden. Retrying with slow backoff in the background.";
+    }
+    return `Reverse tunnel start failed; reconnect will continue in the background when possible: ${message}`;
 }
 
 function stringArrayArg(args: Record<string, unknown>, key: string): string[] {
@@ -707,8 +729,11 @@ async function main() {
                 console.error(`[Envoq MCP Sidecar] Reverse tunnel connected for tenant ${status.tenant_id ?? "unknown"}`);
             })
             .catch((err) => {
-                const message = err instanceof Error ? err.message : String(err);
-                console.error(`[Envoq MCP Sidecar] Reverse tunnel start failed; reconnect will continue in the background when possible: ${message}`);
+                console.error(`[Envoq MCP Sidecar] ${tunnelStartFailureMessage(err)}`);
+                debugLog("MCP reverse tunnel startup failure", {
+                    message: err instanceof Error ? err.message : String(err),
+                    http_status: httpStatusFromError(err)
+                });
             });
     }
 }

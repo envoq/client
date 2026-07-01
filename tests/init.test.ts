@@ -41,3 +41,19 @@ test('client package does not install global repair postinstall hook', async () 
 
     assert.equal(Object.hasOwn(pkg.scripts ?? {}, 'postinstall'), false);
 });
+
+test('init can render PM2 daemon command without running PM2', async () => {
+    const { stdout } = await execFile(
+        process.execPath,
+        ['--experimental-strip-types', path.join(repoRoot, 'src/cli/init.ts'), '--print-pm2-command'],
+        { cwd: repoRoot }
+    );
+    const parsed = JSON.parse(stdout) as { command?: unknown; args?: unknown[] };
+
+    assert.equal(parsed.command, 'pm2');
+    assert.ok(Array.isArray(parsed.args));
+    assert.deepEqual(parsed.args?.slice(0, 2), ['start', path.join(repoRoot, 'dist', 'daemon', 'index.js')]);
+    assert.ok(parsed.args?.includes('envoq-daemon'));
+    assert.ok(parsed.args?.includes(process.execPath));
+    assert.ok(parsed.args?.includes('--update-env'));
+});

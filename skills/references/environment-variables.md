@@ -11,6 +11,9 @@
 - `HUB_SECRET`: Secret used by the sidecar for broker runtime calls.
 - `AGENT_ID`: Stable agent ID, for example `a2a:agent:default:antigravity`.
 - `ENVOQ_HUB_URL`: Broker runtime base URL. Default: `https://api.envoq.tech/api/v1`.
+- `ENVOQ_CONFIG_DIR`: Optional config directory. Default: `~/.envoq`.
+- `ENVOQ_DEBUG`: Set to `1` for verbose CLI, MCP, daemon, and tunnel diagnostics.
+- `ENVOQ_SIDECAR_DISABLE_TUNNEL`: Set to `true` to run MCP tools without the reverse WebSocket tunnel.
 - `ENVOQ_RECIPIENT_ID`: Optional target agent for examples.
 - `ENVOQ_WEBHOOK_URL`: Optional webhook URL for sidecar registration examples.
 

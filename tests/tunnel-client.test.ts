@@ -277,3 +277,75 @@ test('EnvoqTunnelClient times out a stalled WebSocket handshake', async (t) => {
     assert.match(client.status().last_error ?? '', /timed out after 50ms/);
     assert.ok(Date.now() - startedAt < 1_000);
 });
+
+async function testRestrictedHandshake(statusCode: 402 | 403, statusText: string): Promise<void> {
+    const body = `${statusText} tunnel access`;
+    const server = http.createServer(async (req, res) => {
+        if (req.method === 'POST' && req.url === '/api/v1/agents') {
+            const requestBody = await readJsonBody(req);
+            assert.equal(String(requestBody.agent_id), agentId);
+            res.writeHead(201, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+                tenant_id: tenantId,
+                agent_id: agentId
+            }));
+            return;
+        }
+        res.writeHead(404);
+        res.end();
+    });
+
+    server.on('upgrade', (_req, socket) => {
+        socket.write([
+            `HTTP/1.1 ${statusCode} ${statusText}`,
+            'Content-Type: text/plain',
+            `Content-Length: ${Buffer.byteLength(body)}`,
+            '',
+            body
+        ].join('\r\n'));
+        socket.destroy();
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        throw new Error('Missing test server address');
+    }
+
+    const dir = await mkdtemp(path.join(os.tmpdir(), `envoq-tunnel-client-${statusCode}-`));
+    const client = new EnvoqTunnelClient({
+        hubUrl: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey,
+        agentId,
+        identityPath: path.join(dir, 'identity.json'),
+        restrictedReconnectMinMs: 60_000,
+        restrictedReconnectMaxMs: 120_000
+    });
+
+    try {
+        await assert.rejects(
+            () => client.start(),
+            new RegExp(`HTTP ${statusCode}`)
+        );
+
+        const status = client.status();
+        assert.equal(status.connected, false);
+        assert.equal(status.last_http_status, statusCode);
+        assert.equal(status.last_failure_kind, 'restricted');
+        assert.equal(status.reconnect_attempts, 1);
+        assert.ok(status.next_reconnect_at);
+        const nextReconnectIn = Date.parse(status.next_reconnect_at) - Date.now();
+        assert.ok(nextReconnectIn > 30_000);
+    } finally {
+        client.stop();
+        server.close();
+    }
+}
+
+test('EnvoqTunnelClient uses slow backoff for 402 tunnel handshake rejection', async () => {
+    await testRestrictedHandshake(402, 'Payment Required');
+});
+
+test('EnvoqTunnelClient uses slow backoff for 403 tunnel handshake rejection', async () => {
+    await testRestrictedHandshake(403, 'Forbidden');
+});

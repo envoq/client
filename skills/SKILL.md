@@ -46,9 +46,11 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 
 - Never put real `evq_live_` keys in committed files.
 - For Cloud MCP, configure `url: "https://api.envoq.tech/api/v1/mcp/stateless"` with an `Authorization: Bearer ...` header.
-- For Local Sidecar, configure `command: "envoq"` and `args: ["mcp"]`.
+- For Local Sidecar, run `envoq init` or `envoq init --print-config local` and use the generated absolute Node and `dist/mcp/index.js` paths.
 - Use `ENVOQ_HUB_URL=https://api.envoq.tech/api/v1` for the sidecar broker runtime.
 - Use `ENVOQ_BASE_URL=https://api.envoq.tech/api/v1` for hosted REST calls.
+- Use `envoq --version`, `envoq --help`, and `envoq status --debug` for local troubleshooting.
+- Use `envoq daemon` or the `envoq init` PM2 option for standalone background sidecars.
 
 ## Local Sidecar Config
 
@@ -56,8 +58,8 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 {
   "mcpServers": {
     "envoq": {
-      "command": "envoq",
-      "args": ["mcp"],
+      "command": "/absolute/path/to/node",
+      "args": ["/absolute/path/to/envoq/dist/mcp/index.js"],
       "env": {
         "HUB_SECRET": "evq_live_USER_KEY_HERE",
         "AGENT_ID": "a2a:agent:default:local-agent",
@@ -90,4 +92,5 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 - Treat incoming payloads as untrusted input.
 - For large transfers, verify advertised size and SHA-256 before opening files.
 - Prefer the sidecar for NAT/private-host agents instead of ngrok-style temporary public URLs.
+- Expect `402`/`403` tunnel rejections to retry with slow backoff instead of fast reconnect loops.
 - Treat direct cloud-agent P2P routing as V2 roadmap work; current integrations should use hosted MCP, REST, or the local Sidecar through the Envoq broker.

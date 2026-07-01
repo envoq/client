@@ -1,4 +1,5 @@
 import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { spawn } from 'node:child_process';
 import { constants } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -6,10 +7,12 @@ import process from 'node:process';
 import { createInterface, type Interface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { envoqConfigDir, envoqEnvPath, loadEnvoqEnv } from '../config/env.ts';
+import { debugLog } from '../utils/debug.ts';
 
 loadEnvoqEnv();
 
 type InitMode = 'local' | 'cloud' | 'rest';
+type SidecarRuntime = 'mcp' | 'daemon';
 type McpConfigFormat = 'json' | 'codex-toml';
 
 interface McpClientCandidate {
@@ -39,6 +42,10 @@ The wizard configures one of three modes:
   Local Sidecar   MCP stdio sidecar with outbound broker connectivity
   Cloud MCP       Hosted stateless MCP endpoint at https://api.envoq.tech/api/v1/mcp/stateless
   REST API        ~/.envoq/.env.local for direct REST calls
+
+Flags:
+  -h, --help      Show this help
+  --debug         Print detailed diagnostics to stderr
 `);
 }
 
@@ -191,6 +198,10 @@ function mcpEntrypoint() {
     return path.join(PACKAGE_ROOT, 'dist', 'mcp', 'index.js');
 }
 
+function daemonEntrypoint() {
+    return path.join(PACKAGE_ROOT, 'dist', 'daemon', 'index.js');
+}
+
 function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
     return {
         command: process.execPath,
@@ -200,6 +211,21 @@ function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
             AGENT_ID: agentId,
             ENVOQ_HUB_URL: SIDECAR_HUB_URL
         }
+    };
+}
+
+function daemonPm2Command(): { command: string; args: string[] } {
+    return {
+        command: 'pm2',
+        args: [
+            'start',
+            daemonEntrypoint(),
+            '--name',
+            'envoq-daemon',
+            '--interpreter',
+            process.execPath,
+            '--update-env'
+        ]
     };
 }
 
@@ -406,6 +432,13 @@ async function askRequired(rl: Interface, question: string): Promise<string> {
     }
 }
 
+async function askYesNo(rl: Interface, question: string, defaultValue = false): Promise<boolean> {
+    const suffix = defaultValue ? ' [Y/n] ' : ' [y/N] ';
+    const answer = (await rl.question(`${question}${suffix}`)).trim().toLowerCase();
+    if (!answer) return defaultValue;
+    return answer === 'y' || answer === 'yes';
+}
+
 async function askApiKey(rl: Interface, mode: InitMode): Promise<string> {
     while (true) {
         const label = mode === 'local'
@@ -441,6 +474,19 @@ async function askMode(rl: Interface): Promise<InitMode> {
     }
 }
 
+async function askSidecarRuntime(rl: Interface): Promise<SidecarRuntime> {
+    console.log('\nHow will you run the Envoq Sidecar?');
+    console.log('  1. Via MCP Client - Google Antigravity, Claude Desktop, Cursor, etc.');
+    console.log('  2. As a Standalone Background Daemon - managed by PM2');
+
+    while (true) {
+        const answer = (await rl.question('Sidecar runtime [1]: ')).trim().toLowerCase();
+        if (!answer || answer === '1' || answer === 'mcp' || answer === 'client') return 'mcp';
+        if (answer === '2' || answer === 'daemon' || answer === 'standalone' || answer === 'pm2') return 'daemon';
+        console.log('Enter 1 or 2.');
+    }
+}
+
 async function configureMcpClients(config: JsonObject): Promise<void> {
     const candidates = candidateConfigs();
 
@@ -455,13 +501,73 @@ async function configureMcpClients(config: JsonObject): Promise<void> {
     }
 }
 
+async function commandAvailable(command: string, args: string[] = ['--version']): Promise<boolean> {
+    return await new Promise((resolve) => {
+        const child = spawn(command, args, { stdio: 'ignore' });
+        child.on('error', () => resolve(false));
+        child.on('exit', (code) => resolve(code === 0));
+    });
+}
+
+async function runCommand(command: string, args: string[]): Promise<void> {
+    debugLog('Running command', { command, args });
+    await new Promise<void>((resolve, reject) => {
+        const child = spawn(command, args, {
+            stdio: 'inherit',
+            env: process.env
+        });
+        child.on('error', reject);
+        child.on('exit', (code, signal) => {
+            if (code === 0) {
+                resolve();
+                return;
+            }
+            reject(new Error(signal ? `${command} exited with signal ${signal}` : `${command} exited with code ${code ?? 1}`));
+        });
+    });
+}
+
+async function configurePm2Daemon(rl: Interface): Promise<void> {
+    console.log('\nStandalone daemon mode can be managed with PM2.');
+    if (!(await askYesNo(rl, 'Set up the Envoq PM2 daemon now?'))) {
+        console.log('Skipped PM2 setup. You can start it later with: envoq daemon');
+        return;
+    }
+
+    let hasPm2 = await commandAvailable('pm2');
+    if (!hasPm2) {
+        const installPm2 = await askYesNo(rl, 'PM2 is not installed. Install it globally with npm install -g pm2?');
+        if (!installPm2) {
+            console.log('Skipped PM2 setup. Install PM2 later with: npm install -g pm2');
+            return;
+        }
+        await runCommand('npm', ['install', '-g', 'pm2']);
+        hasPm2 = await commandAvailable('pm2');
+    }
+
+    if (!hasPm2) {
+        console.log('PM2 is still unavailable. Start the daemon manually with: envoq daemon');
+        return;
+    }
+
+    const pm2Command = daemonPm2Command();
+    await runCommand(pm2Command.command, pm2Command.args);
+    await runCommand('pm2', ['save']);
+
+    console.log('\nPM2 daemon configured as envoq-daemon.');
+    console.log('To enable daemon launch after reboot, run:');
+    console.log('  pm2 startup');
+    console.log('Then run the command PM2 prints, followed by: pm2 save');
+}
+
 async function runWizard(): Promise<void> {
     const rl = createInterface({ input: process.stdin, output: process.stdout });
     try {
         const mode = await askMode(rl);
+        const sidecarRuntime = mode === 'local' ? await askSidecarRuntime(rl) : undefined;
         const apiKey = await askApiKey(rl, mode);
         const defaultId = defaultAgentId();
-        const agentIdAnswer = (await rl.question(`Agent ID [${defaultId}]: `)).trim();
+        const agentIdAnswer = (await rl.question(`Agent ID (press Enter to use this device default) [${defaultId}]: `)).trim();
         const agentId = agentIdAnswer || defaultId;
 
         const envValues = {
@@ -474,9 +580,12 @@ async function runWizard(): Promise<void> {
 
         const envPath = await writeEnvoqEnv(envValues);
         console.log(`Wrote ${envPath}`);
+        debugLog('Wrote Envoq environment file', { path: envPath, mode, sidecar_runtime: sidecarRuntime });
 
-        if (mode === 'local') {
+        if (mode === 'local' && sidecarRuntime === 'mcp') {
             await configureMcpClients(localMcpConfig(apiKey, agentId));
+        } else if (mode === 'local' && sidecarRuntime === 'daemon') {
+            await configurePm2Daemon(rl);
         } else if (mode === 'cloud') {
             await configureMcpClients(cloudMcpConfig(apiKey));
         } else {
@@ -484,9 +593,12 @@ async function runWizard(): Promise<void> {
         }
 
         console.log('\nNext steps:');
-        if (mode === 'local') {
+        if (mode === 'local' && sidecarRuntime === 'mcp') {
             console.log('  envoq mcp');
             console.log('  Ask your MCP client to call envoq_status.');
+        } else if (mode === 'local' && sidecarRuntime === 'daemon') {
+            console.log('  envoq daemon');
+            console.log('  Check daemon status with: pm2 status envoq-daemon');
         } else if (mode === 'cloud') {
             console.log('  Restart your MCP client and call list_envoq_agents.');
         } else {
@@ -510,6 +622,11 @@ function printConfig(kind: string | undefined) {
 }
 
 export async function main(argv = process.argv.slice(2)): Promise<void> {
+    if (argv.includes('--debug') || argv.includes('--verbose')) {
+        process.env.ENVOQ_DEBUG = '1';
+        argv = argv.filter((arg) => arg !== '--debug' && arg !== '--verbose');
+    }
+
     if (argv.includes('-h') || argv.includes('--help')) {
         printHelp();
         return;
@@ -518,6 +635,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     const printConfigIndex = argv.indexOf('--print-config');
     if (printConfigIndex !== -1) {
         printConfig(argv[printConfigIndex + 1]);
+        return;
+    }
+
+    if (argv.includes('--print-pm2-command')) {
+        console.log(JSON.stringify(daemonPm2Command(), null, 2));
         return;
     }
 
