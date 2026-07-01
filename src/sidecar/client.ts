@@ -15,6 +15,19 @@ export interface DiscoverAgentsOptions {
     limit?: number;
 }
 
+export interface EnvoqBillingStatus {
+    tenant_id: string;
+    plan: string;
+    plan_label: string;
+    billing_status: string;
+    status: string;
+    alert: string | null;
+    tunnel_allowed: boolean;
+    credit_limit: number;
+    current_spend: number;
+    remaining_balance: number;
+}
+
 export class EnvoqHubClient {
     public readonly hubUrl: string;
     public readonly hubSecret: string;
@@ -75,6 +88,19 @@ export class EnvoqHubClient {
             agent_id: `a2a:agent:${namespace}:${name}`,
             card: response.data
         };
+    }
+
+    async getBillingStatus(): Promise<EnvoqBillingStatus> {
+        const response = await axios.get(`${this.hubUrl}/billing/status`, {
+            headers: {
+                Authorization: `Bearer ${this.hubSecret}`
+            }
+        });
+        return response.data as EnvoqBillingStatus;
+    }
+
+    async refreshBilling(): Promise<EnvoqBillingStatus> {
+        return await this.postBearer<EnvoqBillingStatus>('/billing/refresh', {});
     }
 
     async postSigned<T = unknown>(path: string, payload: unknown): Promise<T> {

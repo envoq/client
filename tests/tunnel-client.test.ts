@@ -349,3 +349,78 @@ test('EnvoqTunnelClient uses slow backoff for 402 tunnel handshake rejection', a
 test('EnvoqTunnelClient uses slow backoff for 403 tunnel handshake rejection', async () => {
     await testRestrictedHandshake(403, 'Forbidden');
 });
+
+test('EnvoqTunnelClient refreshNow clears restricted backoff and reconnects immediately', async (t) => {
+    let rejectUpgrade = true;
+    let serverWs: WebSocket | null = null;
+    const server = http.createServer(async (req, res) => {
+        if (req.method === 'POST' && req.url === '/api/v1/agents') {
+            const requestBody = await readJsonBody(req);
+            assert.equal(String(requestBody.agent_id), agentId);
+            res.writeHead(201, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+                tenant_id: tenantId,
+                agent_id: agentId
+            }));
+            return;
+        }
+        res.writeHead(404);
+        res.end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+
+    server.on('upgrade', (_req, socket, head) => {
+        if (rejectUpgrade) {
+            const body = 'Payment Required tunnel access';
+            socket.write([
+                'HTTP/1.1 402 Payment Required',
+                'Content-Type: text/plain',
+                `Content-Length: ${Buffer.byteLength(body)}`,
+                '',
+                body
+            ].join('\r\n'));
+            socket.destroy();
+            return;
+        }
+        wss.handleUpgrade(_req, socket, head, (ws) => wss.emit('connection', ws, _req));
+    });
+    wss.on('connection', (ws) => {
+        serverWs = ws;
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        throw new Error('Missing test server address');
+    }
+
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'envoq-tunnel-client-refresh-'));
+    const client = new EnvoqTunnelClient({
+        hubUrl: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey,
+        agentId,
+        identityPath: path.join(dir, 'identity.json'),
+        restrictedReconnectMinMs: 60_000,
+        restrictedReconnectMaxMs: 120_000,
+        pingIntervalMs: 10_000
+    });
+
+    t.after(() => {
+        client.stop();
+        wss.close();
+        server.close();
+    });
+
+    await assert.rejects(() => client.start(), /HTTP 402/);
+    assert.equal(client.status().last_failure_kind, 'restricted');
+    assert.ok(client.status().next_reconnect_at);
+
+    rejectUpgrade = false;
+    await client.refreshNow();
+    await waitFor(() => serverWs);
+
+    const status = client.status();
+    assert.equal(status.connected, true);
+    assert.equal(status.next_reconnect_at, null);
+    assert.equal(status.last_http_status, null);
+});

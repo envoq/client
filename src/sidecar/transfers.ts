@@ -256,6 +256,15 @@ export class EnvoqSidecar {
         return this.tunnelClient.status();
     }
 
+    async refreshTunnel(): Promise<EnvoqTunnelStatus> {
+        await this.tunnelClient.refreshNow();
+        return this.tunnelClient.status();
+    }
+
+    tunnelStatus(): EnvoqTunnelStatus {
+        return this.tunnelClient.status();
+    }
+
     stopTunnel(): EnvoqTunnelStatus {
         this.tunnelClient.stop();
         return this.tunnelClient.status();

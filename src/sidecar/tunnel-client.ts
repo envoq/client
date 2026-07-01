@@ -196,6 +196,28 @@ export class EnvoqTunnelClient {
         this.connectedAt = null;
     }
 
+    async refreshNow(): Promise<void> {
+        this.shouldRun = true;
+        this.clearReconnectTimer();
+        if (this.ws?.readyState === WebSocket.OPEN) {
+            return;
+        }
+        if (this.ws && this.ws.readyState !== WebSocket.CLOSED) {
+            try {
+                this.ws.terminate();
+            } catch {
+                // The socket may already be closed.
+            }
+            this.ws = null;
+        }
+        if (!this.connectPromise) {
+            this.connectPromise = this.connectOnce().finally(() => {
+                this.connectPromise = null;
+            });
+        }
+        await this.connectPromise;
+    }
+
     status(): EnvoqTunnelStatus {
         const connected = this.ws?.readyState === WebSocket.OPEN;
         return {

@@ -1,6 +1,6 @@
 import { access, chmod, mkdir, readFile, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
-import { constants } from 'node:fs';
+import { constants, existsSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
@@ -8,6 +8,7 @@ import { createInterface, type Interface } from 'node:readline/promises';
 import { fileURLToPath } from 'node:url';
 import { envoqConfigDir, envoqEnvPath, loadEnvoqEnv } from '../config/env.ts';
 import { debugLog } from '../utils/debug.ts';
+import { isDirectEntrypoint } from '../utils/entrypoint.ts';
 
 loadEnvoqEnv();
 
@@ -202,7 +203,28 @@ function daemonEntrypoint() {
     return path.join(PACKAGE_ROOT, 'dist', 'daemon', 'index.js');
 }
 
+function isNativeBinaryRuntime() {
+    const bunRuntime = typeof (process.versions as Record<string, string | undefined>).bun === 'string';
+    const argvEntrypoint = process.argv[1] ? path.resolve(process.argv[1]) : '';
+    const execEntrypoint = process.execPath ? path.resolve(process.execPath) : '';
+    return process.env.ENVOQ_NATIVE_BINARY === 'true'
+        || !existsSync(path.join(PACKAGE_ROOT, 'package.json'))
+        || (bunRuntime && argvEntrypoint !== '' && argvEntrypoint === execEntrypoint);
+}
+
 function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
+    if (isNativeBinaryRuntime()) {
+        return {
+            command: process.execPath,
+            args: ['mcp'],
+            env: {
+                HUB_SECRET: hubSecret,
+                AGENT_ID: agentId,
+                ENVOQ_HUB_URL: SIDECAR_HUB_URL
+            }
+        };
+    }
+
     return {
         command: process.execPath,
         args: [mcpEntrypoint()],
@@ -215,6 +237,21 @@ function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
 }
 
 function daemonPm2Command(): { command: string; args: string[] } {
+    if (isNativeBinaryRuntime()) {
+        return {
+            command: 'pm2',
+            args: [
+                'start',
+                process.execPath,
+                '--name',
+                'envoq-daemon',
+                '--update-env',
+                '--',
+                'daemon'
+            ]
+        };
+    }
+
     return {
         command: 'pm2',
         args: [
@@ -646,8 +683,10 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
     await runWizard();
 }
 
-main().catch((error) => {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`envoq init failed: ${message}`);
-    process.exit(1);
-});
+if (process.env.ENVOQ_CLI_DISPATCH !== '1' && isDirectEntrypoint(import.meta.url)) {
+    main().catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        console.error(`envoq init failed: ${message}`);
+        process.exit(1);
+    });
+}

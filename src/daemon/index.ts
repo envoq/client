@@ -1,12 +1,15 @@
 import { loadEnvoqEnv } from '../config/env.js';
 import { EnvoqSidecar } from '../sidecar/transfers.js';
 import { debugLog } from '../utils/debug.js';
+import { isDirectEntrypoint } from '../utils/entrypoint.js';
+import { startDaemonControlServer, type DaemonControlServer } from './control.js';
 
 loadEnvoqEnv();
 
 const ENVOQ_HUB_URL = process.env.ENVOQ_HUB_URL || 'https://api.envoq.tech/api/v1';
 const HUB_SECRET = process.env.HUB_SECRET;
 const AGENT_ID = process.env.AGENT_ID;
+let controlServer: DaemonControlServer | null = null;
 
 if (!HUB_SECRET || !AGENT_ID) {
     console.error('FATAL: HUB_SECRET and AGENT_ID environment variables are required to start the Envoq daemon.');
@@ -43,11 +46,18 @@ function tunnelStartFailureMessage(err: unknown): string {
     return `Reverse tunnel start failed; reconnect will continue in the background when possible: ${message}`;
 }
 
-function stop(signal: NodeJS.Signals): void {
+async function stop(signal: NodeJS.Signals): Promise<void> {
     if (stopping) return;
     stopping = true;
     console.error(`[Envoq Daemon] Received ${signal}; stopping.`);
     sidecar.stopTunnel();
+    try {
+        await controlServer?.close();
+    } catch (error) {
+        debugLog('Failed to close daemon control server', {
+            message: error instanceof Error ? error.message : String(error)
+        });
+    }
     if (keepAlive) {
         clearInterval(keepAlive);
         keepAlive = null;
@@ -55,10 +65,10 @@ function stop(signal: NodeJS.Signals): void {
     process.exit(0);
 }
 
-process.once('SIGINT', () => stop('SIGINT'));
-process.once('SIGTERM', () => stop('SIGTERM'));
+process.once('SIGINT', () => void stop('SIGINT'));
+process.once('SIGTERM', () => void stop('SIGTERM'));
 
-async function main(): Promise<void> {
+export async function main(_argv: string[] = process.argv.slice(2)): Promise<void> {
     console.error(`[Envoq Daemon] Starting reverse tunnel for Agent ID: ${AGENT_ID}`);
     debugLog('Daemon runtime configuration', {
         hub_url: ENVOQ_HUB_URL,
@@ -66,6 +76,8 @@ async function main(): Promise<void> {
     });
 
     keepAlive = setInterval(() => undefined, 60_000);
+    controlServer = await startDaemonControlServer(sidecar);
+    console.error(`[Envoq Daemon] Local control socket ready on 127.0.0.1:${controlServer.port}`);
 
     await sidecar.startTunnel()
         .then((status) => {
@@ -80,7 +92,9 @@ async function main(): Promise<void> {
         });
 }
 
-main().catch((err) => {
-    console.error('Fatal Envoq daemon error:', err);
-    process.exit(1);
-});
+if (process.env.ENVOQ_CLI_DISPATCH !== '1' && isDirectEntrypoint(import.meta.url)) {
+    main().catch((err) => {
+        console.error('Fatal Envoq daemon error:', err);
+        process.exit(1);
+    });
+}

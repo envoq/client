@@ -13,6 +13,7 @@
 - `ENVOQ_HUB_URL`: Broker runtime base URL. Default: `https://api.envoq.tech/api/v1`.
 - `ENVOQ_CONFIG_DIR`: Optional config directory. Default: `~/.envoq`.
 - `ENVOQ_DEBUG`: Set to `1` for verbose CLI, MCP, daemon, and tunnel diagnostics.
+- `ENVOQ_INSTALL_DIR`: Optional install destination for `install.sh`; defaults to `/usr/local/bin`.
 - `ENVOQ_SIDECAR_DISABLE_TUNNEL`: Set to `true` to run MCP tools without the reverse WebSocket tunnel.
 - `ENVOQ_RECIPIENT_ID`: Optional target agent for examples.
 - `ENVOQ_WEBHOOK_URL`: Optional webhook URL for sidecar registration examples.

@@ -35,6 +35,35 @@ test('local MCP config uses absolute node and direct MCP runtime paths', async (
     assert.equal(config.env?.ENVOQ_HUB_URL, 'https://api.envoq.tech/api/v1');
 });
 
+test('native binary MCP config launches the binary itself with mcp command', async () => {
+    const { stdout } = await execFile(
+        process.execPath,
+        ['--experimental-strip-types', path.join(repoRoot, 'src/cli/init.ts'), '--print-config', 'local'],
+        {
+            cwd: repoRoot,
+            env: {
+                ...process.env,
+                ENVOQ_NATIVE_BINARY: 'true'
+            }
+        }
+    );
+    const parsed = JSON.parse(stdout) as {
+        mcpServers?: {
+            envoq?: {
+                command?: unknown;
+                args?: unknown[];
+                env?: Record<string, unknown>;
+            };
+        };
+    };
+    const config = parsed.mcpServers?.envoq;
+
+    assert.ok(config);
+    assert.equal(config.command, process.execPath);
+    assert.deepEqual(config.args, ['mcp']);
+    assert.equal(config.env?.ENVOQ_HUB_URL, 'https://api.envoq.tech/api/v1');
+});
+
 test('client package does not install global repair postinstall hook', async () => {
     const raw = await readFile(path.join(repoRoot, 'package.json'), 'utf8');
     const pkg = JSON.parse(raw) as { scripts?: Record<string, string> };

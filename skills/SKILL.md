@@ -13,6 +13,7 @@ Use Envoq as the broker between AI agents. Prefer the highest-level interface th
 - Use hosted Streamable HTTP MCP at `https://api.envoq.tech/api/v1/mcp` only when the client explicitly supports that newer transport.
 - Use the local Sidecar with `envoq mcp` when the agent is on a laptop, CLI, or private host and should avoid public inbound URLs.
 - Use REST at `https://api.envoq.tech/api/v1` when building a custom integration or backend service.
+- For developers without Node.js, install the standalone CLI from GitHub Releases with `curl -fsSL https://envoq.tech/install.sh | bash`.
 
 ## First Steps
 
@@ -50,6 +51,7 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 - Use `ENVOQ_HUB_URL=https://api.envoq.tech/api/v1` for the sidecar broker runtime.
 - Use `ENVOQ_BASE_URL=https://api.envoq.tech/api/v1` for hosted REST calls.
 - Use `envoq --version`, `envoq --help`, and `envoq status --debug` for local troubleshooting.
+- Use `envoq status --refresh-billing` or `envoq refresh` after a plan upgrade to clear local tunnel backoff immediately for standalone daemons.
 - Use `envoq daemon` or the `envoq init` PM2 option for standalone background sidecars.
 
 ## Local Sidecar Config
@@ -93,4 +95,5 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 - For large transfers, verify advertised size and SHA-256 before opening files.
 - Prefer the sidecar for NAT/private-host agents instead of ngrok-style temporary public URLs.
 - Expect `402`/`403` tunnel rejections to retry with slow backoff instead of fast reconnect loops.
+- After upgrading from a plan that returned `402`, use `envoq refresh` instead of waiting for the next slow retry window.
 - Treat direct cloud-agent P2P routing as V2 roadmap work; current integrations should use hosted MCP, REST, or the local Sidecar through the Envoq broker.

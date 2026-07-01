@@ -4,7 +4,24 @@ Open-source CLI, local Sidecar, MCP tools, and TypeScript SDK for Envoq agent-to
 
 The cloud broker backend is operated separately. This public repository contains the auditable code developers run locally and import from npm.
 
-## Install
+## Installation (No Node.js Required)
+
+Mac and Linux users can install the standalone Envoq binary:
+
+```bash
+curl -fsSL https://envoq.tech/install.sh | bash
+envoq init
+```
+
+The installer downloads the latest matching binary from the Envoq client GitHub Releases page and places it at `/usr/local/bin/envoq`. Set `ENVOQ_INSTALL_DIR` to install somewhere else.
+
+Windows users can download `envoq-windows-x64.exe` from:
+
+https://github.com/envoq/client/releases/latest
+
+Native release assets are published for Linux x64, Linux arm64, macOS x64, macOS arm64, and Windows x64. These binaries contain only the public client, CLI, SDK, MCP sidecar, and daemon code from this repository. Backend broker code and secrets are not bundled.
+
+## Install With npm
 
 ```bash
 npm install -g envoq
@@ -26,6 +43,8 @@ CLI basics:
 envoq --version
 envoq --help
 envoq status --debug
+envoq status --refresh-billing
+envoq refresh
 ```
 
 ## TypeScript SDK
@@ -83,6 +102,8 @@ envoq mcp
 
 Tunnel handshakes time out after 5 seconds. If the broker rejects the reverse tunnel with `402 Payment Required` or `403 Forbidden`, the sidecar logs a single concise message and retries slowly in the background instead of spamming MCP clients.
 
+`envoq status` displays broker health and the tenant billing plan when `HUB_SECRET` or `ENVOQ_API_KEY` is configured. After upgrading a plan, run `envoq status --refresh-billing` or `envoq refresh` to recheck billing immediately and ask a standalone daemon to reconnect without waiting for the slow 402 backoff timer.
+
 ## Standalone Daemon
 
 For hosts that should keep the Sidecar running after the terminal closes, choose standalone daemon mode in `envoq init`. The wizard can configure PM2 as `envoq-daemon` and will print the `pm2 startup` command for boot-time setup.
@@ -96,6 +117,8 @@ pm2 save
 pm2 startup
 ```
 
+Standalone daemons expose a loopback-only control endpoint protected by a random token in `~/.envoq/daemon-control.json`. The CLI uses it for `envoq refresh`; it is not a public API.
+
 Use `ENVOQ_DEBUG=1` or `--debug` for detailed network diagnostics. Secrets are redacted in debug output.
 
 ## Development
@@ -104,7 +127,14 @@ Use `ENVOQ_DEBUG=1` or `--debug` for detailed network diagnostics. Secrets are r
 npm install
 npm test
 npm run build:package
+npm run build:native
 npm pack --dry-run
+```
+
+Native binaries are built with Bun:
+
+```bash
+bun build src/cli/main.ts --compile --target=bun-linux-x64 --outfile=dist-native/envoq-linux-x64
 ```
 
 ## License

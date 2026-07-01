@@ -11,6 +11,7 @@ import type { LargeTransferManifest } from "../sidecar/manifest.js";
 import type { DiscoverAgentsInput, PrepareLargeTransferInput, TransferSlaProposal } from "../sidecar/transfers.js";
 import { loadEnvoqEnv } from "../config/env.js";
 import { debugLog } from "../utils/debug.js";
+import { isDirectEntrypoint } from "../utils/entrypoint.js";
 
 loadEnvoqEnv();
 
@@ -32,7 +33,7 @@ const sidecar = new EnvoqSidecar({
 const server = new Server(
     {
         name: `envoq-mcp-sidecar-${AGENT_ID}`,
-        version: "1.1.7",
+        version: "1.1.8",
     },
     {
         capabilities: {
@@ -681,7 +682,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 });
 
-async function main() {
+export async function main(_argv: string[] = process.argv.slice(2)) {
     if (process.env.ENVOQ_SIDECAR_AUTO_FILE_SERVER === "true") {
         const options: { host?: string; port?: number; publicUrl?: string } = {};
         if (process.env.ENVOQ_SIDECAR_FILE_HOST) {
@@ -738,7 +739,9 @@ async function main() {
     }
 }
 
-main().catch((err) => {
-    console.error("Fatal MCP sidecar error:", err);
-    process.exit(1);
-});
+if (process.env.ENVOQ_CLI_DISPATCH !== '1' && isDirectEntrypoint(import.meta.url)) {
+    main().catch((err) => {
+        console.error("Fatal MCP sidecar error:", err);
+        process.exit(1);
+    });
+}

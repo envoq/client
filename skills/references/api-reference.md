@@ -81,6 +81,16 @@ Registers or resumes reverse tunnel intent. Required field: `agent_id`.
 
 Reserved for WSS runtime handoff.
 
+## Billing
+
+`GET /billing/status`
+
+Returns the authenticated tenant's current plan, billing status, remaining balance, and whether reverse tunnels are currently allowed.
+
+`POST /billing/refresh`
+
+Rechecks billing state and clears stale hard-limit blocks when the account is back under its configured limit. Use this after a plan upgrade, then run `envoq refresh` or `envoq status --refresh-billing` to ask a standalone daemon to reconnect immediately.
+
 ## Transfers
 
 `POST /transfers`
