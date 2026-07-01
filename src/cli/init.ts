@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { createInterface, type Interface } from 'node:readline/promises';
+import { fileURLToPath } from 'node:url';
 
 loadDotenv({ quiet: true, override: false });
 loadDotenv({ path: '.env.local', quiet: true, override: false });
@@ -25,6 +26,7 @@ interface JsonObject {
 const CLOUD_MCP_URL = 'https://api.envoq.tech/api/v1/mcp/stateless';
 const REST_BASE_URL = 'https://api.envoq.tech/api/v1';
 const SIDECAR_HUB_URL = 'https://api.envoq.tech/api/v1';
+const PACKAGE_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 function printHelp() {
     console.log(`Envoq init
@@ -186,10 +188,14 @@ function defaultAgentId() {
     return `a2a:agent:default:${host}`.slice(0, 64);
 }
 
+function envoqCliEntrypoint() {
+    return path.join(PACKAGE_ROOT, 'bin', 'envoq.js');
+}
+
 function localMcpConfig(hubSecret: string, agentId: string): JsonObject {
     return {
-        command: 'envoq',
-        args: ['mcp'],
+        command: process.execPath,
+        args: [envoqCliEntrypoint(), 'mcp'],
         env: {
             HUB_SECRET: hubSecret,
             AGENT_ID: agentId,

@@ -149,3 +149,72 @@ test('EnvoqTunnelClient registers identity, opens signed WSS tunnel, and stores 
     assert.equal(status.connected, true);
     assert.equal(status.tenant_id, tenantId);
 });
+
+test('EnvoqTunnelClient falls back to default tenant for legacy broker registration responses', async (t) => {
+    const originalTenantId = process.env.ENVOQ_TENANT_ID;
+    delete process.env.ENVOQ_TENANT_ID;
+
+    let registeredAgentId = '';
+    let upgradeTenantId = '';
+
+    const server = http.createServer(async (req, res) => {
+        if (req.method === 'POST' && req.url === '/api/v1/agents') {
+            assert.equal(req.headers.authorization, `Bearer ${apiKey}`);
+            const body = await readJsonBody(req);
+            registeredAgentId = String(body.agent_id);
+            res.writeHead(201, { 'content-type': 'application/json' });
+            res.end(JSON.stringify({
+                agent_id: registeredAgentId,
+                agent: {
+                    agent_id: registeredAgentId,
+                    status: 'registered'
+                }
+            }));
+            return;
+        }
+        res.writeHead(404);
+        res.end();
+    });
+    const wss = new WebSocketServer({ noServer: true });
+
+    server.on('upgrade', (req, socket, head) => {
+        assert.equal(req.url, '/api/v1/connect');
+        assert.equal(req.headers['x-envoq-agent-id'], agentId);
+        upgradeTenantId = String(req.headers['x-envoq-tenant-id']);
+        wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    });
+
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') {
+        throw new Error('Missing test server address');
+    }
+
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'envoq-tunnel-client-legacy-'));
+    const client = new EnvoqTunnelClient({
+        hubUrl: `http://127.0.0.1:${address.port}/api/v1`,
+        apiKey,
+        agentId,
+        identityPath: path.join(dir, 'identity.json'),
+        pingIntervalMs: 10_000
+    });
+
+    t.after(() => {
+        if (originalTenantId === undefined) {
+            delete process.env.ENVOQ_TENANT_ID;
+        } else {
+            process.env.ENVOQ_TENANT_ID = originalTenantId;
+        }
+        client.stop();
+        wss.close();
+        server.close();
+    });
+
+    await client.start();
+
+    assert.equal(registeredAgentId, agentId);
+    assert.equal(upgradeTenantId, 'default');
+    const status = client.status();
+    assert.equal(status.connected, true);
+    assert.equal(status.tenant_id, 'default');
+});

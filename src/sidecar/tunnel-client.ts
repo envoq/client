@@ -168,10 +168,8 @@ export class EnvoqTunnelClient {
             ?? maybeString(response.data.tenantId)
             ?? maybeString(response.data.agent?.tenant_id)
             ?? maybeString(response.data.agent?.tenantId)
-            ?? this.tenantId;
-        if (!tenantId) {
-            throw new Error('Broker did not return tenant_id for tunnel registration');
-        }
+            ?? this.tenantId
+            ?? 'default';
         this.tenantId = tenantId;
     }
 
