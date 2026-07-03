@@ -16,12 +16,14 @@ interface BillingStatusResponse {
     credit_limit?: number;
     current_spend?: number;
     remaining_balance?: number;
+    alert_message?: string | null;
     billing?: {
         status?: string;
         tunnel_allowed?: boolean;
         credit_limit?: number;
         current_spend?: number;
         remaining_balance?: number;
+        alert_message?: string | null;
     };
 }
 
@@ -156,6 +158,10 @@ function printBillingStatus(status: BillingStatusResponse | null): void {
     const remaining = status.remaining_balance ?? billing.remaining_balance;
     if (typeof remaining === 'number' && Number.isFinite(remaining)) {
         console.log(`- remaining balance: ${remaining}`);
+    }
+    const alertMessage = status.alert_message ?? billing.alert_message;
+    if (alertMessage) {
+        console.log(`- alert: ${alertMessage}`);
     }
 }
 

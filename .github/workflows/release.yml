@@ -43,6 +43,7 @@ jobs:
         with:
           files: |
             dist-native/envoq-linux-x64
+            dist-native/envoq-linux-x64-baseline
             dist-native/envoq-linux-arm64
             dist-native/envoq-macos-x64
             dist-native/envoq-macos-arm64

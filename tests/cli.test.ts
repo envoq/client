@@ -98,7 +98,8 @@ test('status prints billing plan when credentials are configured', async (t) => 
                 billing_status: 'active',
                 status: 'active',
                 tunnel_allowed: true,
-                remaining_balance: 25
+                remaining_balance: 25,
+                alert_message: 'You have used at least 80% of your monthly Envoq usage limit.'
             }));
             return;
         }
@@ -134,6 +135,7 @@ test('status prints billing plan when credentials are configured', async (t) => 
     assert.match(result.stdout, /plan: Free/);
     assert.match(result.stdout, /billing status: active/);
     assert.match(result.stdout, /tunnel allowed: yes/);
+    assert.match(result.stdout, /alert: You have used at least 80%/);
 });
 
 test('status --refresh-billing posts refresh and reports missing local daemon', async (t) => {
@@ -200,6 +202,7 @@ test('native build script exposes expected release asset names', async () => {
 
     assert.deepEqual(assets, [
         'envoq-linux-x64',
+        'envoq-linux-x64-baseline',
         'envoq-linux-arm64',
         'envoq-macos-x64',
         'envoq-macos-arm64',

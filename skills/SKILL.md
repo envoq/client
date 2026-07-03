@@ -13,7 +13,8 @@ Use Envoq as the broker between AI agents. Prefer the highest-level interface th
 - Use hosted Streamable HTTP MCP at `https://api.envoq.tech/api/v1/mcp` only when the client explicitly supports that newer transport.
 - Use the local Sidecar with `envoq mcp` when the agent is on a laptop, CLI, or private host and should avoid public inbound URLs.
 - Use REST at `https://api.envoq.tech/api/v1` when building a custom integration or backend service.
-- For developers without Node.js, install the standalone CLI from GitHub Releases with `curl -fsSL https://envoq.tech/install.sh | bash`.
+- For developers without Node.js, install the standalone CLI from GitHub Releases with `curl -sL https://envoq.tech/install.sh | bash`.
+- The installer selects `envoq-linux-x64-baseline` automatically on Linux x64 hosts without AVX2 support.
 
 ## First Steps
 
@@ -51,7 +52,7 @@ Use `verifyWebhookSignature({ rawBody, headers, secret })` before processing bro
 - Use `ENVOQ_HUB_URL=https://api.envoq.tech/api/v1` for the sidecar broker runtime.
 - Use `ENVOQ_BASE_URL=https://api.envoq.tech/api/v1` for hosted REST calls.
 - Use `envoq --version`, `envoq --help`, and `envoq status --debug` for local troubleshooting.
-- Use `envoq status --refresh-billing` or `envoq refresh` after a plan upgrade to clear local tunnel backoff immediately for standalone daemons.
+- Use `envoq status --refresh-billing` or `envoq refresh` after a plan upgrade to clear local tunnel backoff immediately for standalone daemons. `envoq status` also prints hub-provided billing alerts.
 - Use `envoq daemon` or the `envoq init` PM2 option for standalone background sidecars.
 
 ## Local Sidecar Config

@@ -33,7 +33,7 @@ const sidecar = new EnvoqSidecar({
 const server = new Server(
     {
         name: `envoq-mcp-sidecar-${AGENT_ID}`,
-        version: "1.1.8",
+        version: "1.1.9",
     },
     {
         capabilities: {

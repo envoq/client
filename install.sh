@@ -28,6 +28,17 @@ detect_arch() {
   esac
 }
 
+supports_avx2() {
+  if [ -r /proc/cpuinfo ]; then
+    grep -qi 'avx2' /proc/cpuinfo
+    return
+  fi
+
+  # macOS x64 release assets are built for modern Intel macOS hosts. Linux x64
+  # gets a separate baseline asset because older VMs frequently lack AVX2.
+  return 0
+}
+
 latest_tag() {
   curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
     | sed -n 's/.*"tag_name"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
@@ -62,6 +73,9 @@ need install
 os="$(detect_os)"
 arch="$(detect_arch)"
 asset="envoq-${os}-${arch}"
+if [ "$os" = "linux" ] && [ "$arch" = "x64" ] && ! supports_avx2; then
+  asset="envoq-linux-x64-baseline"
+fi
 tag="$(latest_tag)"
 
 if [ -z "$tag" ]; then

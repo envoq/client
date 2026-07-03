@@ -22,6 +22,7 @@ export interface EnvoqBillingStatus {
     billing_status: string;
     status: string;
     alert: string | null;
+    alert_message?: string | null;
     tunnel_allowed: boolean;
     credit_limit: number;
     current_spend: number;

@@ -9,17 +9,17 @@ The cloud broker backend is operated separately. This public repository contains
 Mac and Linux users can install the standalone Envoq binary:
 
 ```bash
-curl -fsSL https://envoq.tech/install.sh | bash
+curl -sL https://envoq.tech/install.sh | bash
 envoq init
 ```
 
-The installer downloads the latest matching binary from the Envoq client GitHub Releases page and places it at `/usr/local/bin/envoq`. Set `ENVOQ_INSTALL_DIR` to install somewhere else.
+The installer downloads the latest matching binary from the Envoq client GitHub Releases page and places it at `/usr/local/bin/envoq`. Set `ENVOQ_INSTALL_DIR` to install somewhere else. On Linux x64, the installer checks AVX2 support and automatically falls back to the `envoq-linux-x64-baseline` binary on older or virtualized CPUs.
 
 Windows users can download `envoq-windows-x64.exe` from:
 
 https://github.com/envoq/client/releases/latest
 
-Native release assets are published for Linux x64, Linux arm64, macOS x64, macOS arm64, and Windows x64. These binaries contain only the public client, CLI, SDK, MCP sidecar, and daemon code from this repository. Backend broker code and secrets are not bundled.
+Native release assets are published for Linux x64, Linux x64 baseline, Linux arm64, macOS x64, macOS arm64, and Windows x64. These binaries contain only the public client, CLI, SDK, MCP sidecar, and daemon code from this repository. Backend broker code and secrets are not bundled.
 
 ## Install With npm
 
@@ -102,7 +102,7 @@ envoq mcp
 
 Tunnel handshakes time out after 5 seconds. If the broker rejects the reverse tunnel with `402 Payment Required` or `403 Forbidden`, the sidecar logs a single concise message and retries slowly in the background instead of spamming MCP clients.
 
-`envoq status` displays broker health and the tenant billing plan when `HUB_SECRET` or `ENVOQ_API_KEY` is configured. After upgrading a plan, run `envoq status --refresh-billing` or `envoq refresh` to recheck billing immediately and ask a standalone daemon to reconnect without waiting for the slow 402 backoff timer.
+`envoq status` displays broker health, the tenant billing plan, remaining balance, and any hub-provided billing alert when `HUB_SECRET` or `ENVOQ_API_KEY` is configured. After upgrading a plan, run `envoq status --refresh-billing` or `envoq refresh` to recheck billing immediately and ask a standalone daemon to reconnect without waiting for the slow 402 backoff timer.
 
 ## Standalone Daemon
 
@@ -135,6 +135,7 @@ Native binaries are built with Bun:
 
 ```bash
 bun build src/cli/main.ts --compile --target=bun-linux-x64 --outfile=dist-native/envoq-linux-x64
+bun build src/cli/main.ts --compile --target=bun-linux-x64-baseline --outfile=dist-native/envoq-linux-x64-baseline
 ```
 
 ## License

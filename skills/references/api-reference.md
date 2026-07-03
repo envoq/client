@@ -85,7 +85,7 @@ Reserved for WSS runtime handoff.
 
 `GET /billing/status`
 
-Returns the authenticated tenant's current plan, billing status, remaining balance, and whether reverse tunnels are currently allowed.
+Returns the authenticated tenant's current plan, billing status, remaining balance, billing alert message, and whether reverse tunnels are currently allowed.
 
 `POST /billing/refresh`
 

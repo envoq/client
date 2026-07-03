@@ -1,1 +1,1 @@
-export const ENVOQ_PACKAGE_VERSION = '1.1.8';
+export const ENVOQ_PACKAGE_VERSION = '1.1.9';

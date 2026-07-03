@@ -151,6 +151,7 @@ export class EnvoqTunnelClient {
     private lastFailureKind: TunnelFailureKind | null = null;
     private nextReconnectAt: string | null = null;
     private connectPromise: Promise<void> | null = null;
+    private restrictedWarningLogged = false;
 
     constructor(config: EnvoqTunnelClientConfig) {
         this.hubUrl = config.hubUrl.replace(/\/+$/, '');
@@ -251,8 +252,23 @@ export class EnvoqTunnelClient {
                 http_status: this.lastHttpStatus,
                 message: this.lastError
             });
+            this.logRestrictedAccessWarningOnce();
             this.scheduleReconnect();
             throw err;
+        }
+    }
+
+    private logRestrictedAccessWarningOnce(): void {
+        if (this.lastFailureKind !== 'restricted' || this.restrictedWarningLogged) {
+            return;
+        }
+        this.restrictedWarningLogged = true;
+        if (this.lastHttpStatus === 402) {
+            console.error('[Envoq] Your usage limit has been exhausted. Run `envoq status` to check your balance, or visit envoq.tech to upgrade.');
+            return;
+        }
+        if (this.lastHttpStatus === 403) {
+            console.error('[Envoq] Reverse tunnel access is forbidden for this API key or account. Run `envoq status --debug` for details.');
         }
     }
 

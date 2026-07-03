@@ -13,6 +13,7 @@ const dryRun = process.argv.includes('--dry-run');
 
 const targets = [
     { bun: 'bun-linux-x64', asset: 'envoq-linux-x64' },
+    { bun: 'bun-linux-x64-baseline', asset: 'envoq-linux-x64-baseline' },
     { bun: 'bun-linux-arm64', asset: 'envoq-linux-arm64' },
     { bun: 'bun-darwin-x64', asset: 'envoq-macos-x64' },
     { bun: 'bun-darwin-arm64', asset: 'envoq-macos-arm64' },
