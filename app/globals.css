@@ -1,0 +1,7 @@
+@import 'tailwindcss';
+
+@theme inline { --font-sans: var(--font-geist); --font-mono: var(--font-mono); --color-background: #f7f8fa; --color-foreground: #111827; --color-card: #ffffff; --color-card-foreground: #111827; --color-muted: #eef1f5; --color-muted-foreground: #64748b; --color-border: #dbe1e8; --color-primary: #3155e7; --color-primary-foreground: #ffffff; --color-accent: #dff7ed; --color-accent-foreground: #166c4b; --radius-lg: 1rem; }
+* { box-sizing: border-box; }
+body { margin: 0; background: #f7f8fa; color: #111827; }
+::selection { background: #3155e7; color: white; }
+.grid-paper { background-image: linear-gradient(#dbe1e8 1px, transparent 1px), linear-gradient(90deg, #dbe1e8 1px, transparent 1px); background-size: 32px 32px; }

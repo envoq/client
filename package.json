@@ -38,6 +38,9 @@
     "package.json"
   ],
   "scripts": {
+    "dev": "next dev",
+    "start": "next start",
+    "build:web": "next build",
     "build": "tsc -p tsconfig.package.json",
     "build:package": "tsc -p tsconfig.package.json",
     "build:native": "node scripts/build-native.mjs",
@@ -61,12 +64,21 @@
     "axios": "^1.17.0",
     "dotenv": "^17.4.2",
     "libp2p": "^3.3.4",
+    "lucide-react": "^1.34.0",
+    "next": "^16.3.3",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
     "ws": "^8.21.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/node": "^22",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "@types/ws": "^8.18.1",
+    "postcss": "^8.5.26",
+    "tailwindcss": "^4.3.3",
     "typescript": "^5.7.3"
   },
   "peerDependencies": {
